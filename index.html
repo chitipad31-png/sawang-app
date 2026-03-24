@@ -275,11 +275,16 @@ function updateSummary() {
 async function submitEntry() {
   const dateVal = document.getElementById('entry-date').value;
   const amount = document.getElementById('amount').value.trim();
+  
   if (!dateVal) { showToast('กรุณาเลือกวันที่','err'); return; }
   if (!selectedCat) { showToast('กรุณาเลือกหมวดหมู่ก่อน','err'); return; }
   if (!amount || isNaN(amount) || Number(amount)<=0) { showToast('กรุณากรอกยอดเงิน','err'); return; }
+  
   const btn = document.getElementById('submit-btn');
-  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  btn.disabled = true; 
+  btn.textContent = 'กำลังส่งข้อมูล...';
+
+  // 1. สร้างก้อนข้อมูล
   const entry = {
     id: Date.now().toString(),
     date: dateVal,
@@ -289,6 +294,27 @@ async function submitEntry() {
     note: document.getElementById('note').value.trim(),
     type: currentType
   };
+
+  // 2. เซฟลงเครื่องและเคลียร์หน้าจอ "ทันที" (ผู้ใช้จะได้ไม่ต้องรอ)
+  saveLocal(entry);
+  showToast('✓ บันทึกลงแอปแล้ว', 'ok');
+  
+  // 3. ปล่อยปุ่มให้กดรายการต่อไปได้เลย
+  btn.disabled = false; 
+  btn.textContent = 'บันทึก';
+
+  // 4. ส่งข้อมูลไป Google Sheets แบบ Background (ไม่ต้องใช้ await)
+  fetch(API, {method:'POST', body: JSON.stringify({action:'add', ...entry})})
+    .then(r => r.json())
+    .then(d => {
+      if (d.status !== 'ok') {
+        console.error('Google Sheet Error');
+      }
+    })
+    .catch(e => {
+      console.error('Offline / ส่งไม่สำเร็จ จะเซฟแค่ในเครื่อง', e);
+    });
+}
   try {
     const r = await fetch(API, {method:'POST', body: JSON.stringify({action:'add', ...entry})});
     const d = await r.json();
