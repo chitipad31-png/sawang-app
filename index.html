@@ -452,6 +452,27 @@ async function loadMasterData() {
     console.error('ไม่สามารถดึงข้อมูล Master Data ได้:', error);
   }
 }
+ // ฟังก์ชันดึงประวัติจาก Google Sheets ตอนเปิดแอป
+async function loadHistoryFromSheet() {
+  try {
+    const response = await fetch(API + "?action=getHistory");
+    const data = await response.json();
+    
+    // ถ้าดึงข้อมูลสำเร็จและมีข้อมูล ให้เอามาทับในเครื่องเลย
+    if (data && Array.isArray(data)) {
+      history = data;
+      localStorage.setItem('sawang_v2', JSON.stringify(history)); 
+      updateSummary(); // อัปเดตยอดสรุปด้านบน
+      
+      // ถ้าเปิดหน้าประวัติอยู่ ก็ให้อัปเดตรายการด้วย
+      if (document.getElementById('page-history').style.display === 'block') {
+        renderHistory();
+      }
+    }
+  } catch (error) {
+    console.error('ไม่สามารถดึงประวัติจาก Sheet ได้:', error);
+  }
+}
 
 function showToast(msg, type) {
   const t = document.getElementById('toast');
@@ -460,7 +481,7 @@ function showToast(msg, type) {
 }
 
 // สั่งทำงานตอนเปิดแอป (เรียกแค่รอบเดียวพอ)
-initDate(); renderCats(); updateSummary(); loadMasterData();
+initDate(); renderCats(); updateSummary(); loadMasterData(); loadHistoryFromSheet();
 
 </script>
 </body>
