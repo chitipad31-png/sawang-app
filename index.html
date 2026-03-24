@@ -64,6 +64,22 @@
   .empty{text-align:center;padding:48px 16px;color:var(--muted);font-size:14px}
   .hist-header{font-size:12px;color:var(--muted);font-weight:600;padding:12px 0 4px;display:flex;justify-content:space-between;align-items:center}
   .hist-tip{background:#fff8e6;border:1px solid #fac775;border-radius:10px;padding:10px 13px;font-size:12px;color:#633806;margin-bottom:16px;line-height:1.6}
+
+  /* Delete button */
+  .del-btn{width:30px;height:30px;border-radius:50%;border:none;background:var(--red-light);color:var(--red);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1}
+  .del-btn:active{background:var(--red);color:#fff}
+
+  /* Confirm dialog */
+  #confirm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:center;justify-content:center}
+  #confirm-overlay.show{display:flex}
+  #confirm-box{background:#fff;border-radius:16px;padding:24px 20px;width:300px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18)}
+  #confirm-box h3{font-size:16px;margin-bottom:8px}
+  #confirm-box p{font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6}
+  .confirm-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .confirm-btns button{padding:12px;border-radius:10px;border:none;font-size:14px;font-weight:600;cursor:pointer}
+  .btn-cancel{background:var(--surface);color:var(--text)}
+  .btn-delete{background:var(--red);color:#fff}
+  .btn-delete:disabled{opacity:0.55}
 </style>
 </head>
 <body>
@@ -133,14 +149,27 @@
   </div>
 </div>
 
+<!-- Confirm Dialog -->
+<div id="confirm-overlay">
+  <div id="confirm-box">
+    <h3>ลบรายการนี้?</h3>
+    <p id="confirm-desc"></p>
+    <div class="confirm-btns">
+      <button class="btn-cancel" onclick="closeConfirm()">ยกเลิก</button>
+      <button class="btn-delete" id="confirm-del-btn" onclick="confirmDelete()">ลบเลย</button>
+    </div>
+  </div>
+</div>
+
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbyiP6RQcuzPVqHbd33TGLz__NWp7GDDBkHmv3SImnhCdUFXkY_dw6XTA78g7RDc9AxpMA/exec';
+const API = 'YOUR_APPS_SCRIPT_URL_HERE';
 const CATS = {
   income: ['ยอดขายสด','ยอดโอน','ยอดขายอาหาร','ยอดขายเครื่องดื่ม','ยอดขายของเก่า','LINE MAN'],
   expense: ['ของสด','ผัก/ผลไม้','ของแห้ง','เครื่องปรุง','ของแช่แข็ง','เครื่องดื่ม','เหล้า/เบียร์','ของใช้','เบ็ดเตล็ด','ค่าใช้จ่าย','เชื้อเพลิง','ค่าแรง']
 };
 let currentType = 'income', selectedCat = '';
 let history = JSON.parse(localStorage.getItem('sawang_v2') || '[]');
+let pendingDeleteId = null;
 
 function todayStr() { return new Date().toISOString().split('T')[0]; }
 function fmtDate(s) { return new Date(s+'T00:00:00').toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'}); }
@@ -222,6 +251,7 @@ function renderHistory() {
           ${sub?`<div class="hist-sub">${sub}</div>`:''}
         </div>
         <div class="hist-amount ${r.type}">${r.type==='expense'?'−':'+'} ฿${Number(r.amount).toLocaleString()}</div>
+        <button class="del-btn" onclick="askDelete('${r.id}')" title="ลบ">🗑</button>
       </div>`;
     });
   }
@@ -250,6 +280,7 @@ async function submitEntry() {
   const btn = document.getElementById('submit-btn');
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
   const entry = {
+    id: Date.now().toString(),
     date: dateVal,
     category: selectedCat,
     name: document.getElementById('name').value.trim(),
@@ -258,7 +289,7 @@ async function submitEntry() {
     type: currentType
   };
   try {
-    const r = await fetch(API, {method:'POST', body: JSON.stringify(entry)});
+    const r = await fetch(API, {method:'POST', body: JSON.stringify({action:'add', ...entry})});
     const d = await r.json();
     if (d.status==='ok') {
       saveLocal(entry);
@@ -280,6 +311,52 @@ function saveLocal(entry) {
   document.getElementById('name').value = '';
   document.getElementById('note').value = '';
   selectedCat = ''; renderCats();
+}
+
+// ---- DELETE ----
+function askDelete(id) {
+  const item = history.find(r => r.id === id);
+  if (!item) return;
+  pendingDeleteId = id;
+  const sub = [item.name, item.note].filter(Boolean).join(' · ');
+  document.getElementById('confirm-desc').textContent =
+    `${item.category}${sub ? ' — ' + sub : ''} · ฿${Number(item.amount).toLocaleString()} (${fmtDate(item.date)})`;
+  document.getElementById('confirm-overlay').classList.add('show');
+}
+
+function closeConfirm() {
+  pendingDeleteId = null;
+  document.getElementById('confirm-overlay').classList.remove('show');
+}
+
+async function confirmDelete() {
+  if (!pendingDeleteId) return;
+  const id = pendingDeleteId;
+  const btn = document.getElementById('confirm-del-btn');
+  btn.disabled = true; btn.textContent = 'กำลังลบ...';
+  try {
+    const r = await fetch(API, {method:'POST', body: JSON.stringify({action:'delete', id})});
+    const d = await r.json();
+    if (d.status === 'ok') {
+      deleteLocal(id);
+      closeConfirm();
+      showToast('✓ ลบออกจาก Google Sheet แล้ว', 'ok');
+    } else {
+      showToast('ลบไม่สำเร็จ ลองใหม่', 'err');
+    }
+  } catch(e) {
+    deleteLocal(id);
+    closeConfirm();
+    showToast('ลบในเครื่องแล้ว (ไม่มี internet)', 'ok');
+  }
+  btn.disabled = false; btn.textContent = 'ลบเลย';
+}
+
+function deleteLocal(id) {
+  history = history.filter(r => r.id !== id);
+  localStorage.setItem('sawang_v2', JSON.stringify(history));
+  updateSummary();
+  renderHistory();
 }
 
 function showToast(msg, type) {
