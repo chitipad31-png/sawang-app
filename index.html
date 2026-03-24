@@ -303,7 +303,7 @@ async function submitEntry() {
   btn.disabled = false; 
   btn.textContent = 'บันทึก';
 
-  // 4. ส่งข้อมูลไป Google Sheets แบบ Background (ไม่ต้องใช้ await)
+  // 4. ส่งข้อมูลไป Google Sheets แบบ Background
   fetch(API, {method:'POST', body: JSON.stringify({action:'add', ...entry})})
     .then(r => r.json())
     .then(d => {
@@ -314,20 +314,6 @@ async function submitEntry() {
     .catch(e => {
       console.error('Offline / ส่งไม่สำเร็จ จะเซฟแค่ในเครื่อง', e);
     });
-}
-  try {
-    const r = await fetch(API, {method:'POST', body: JSON.stringify({action:'add', ...entry})});
-    const d = await r.json();
-    if (d.status==='ok') {
-      saveLocal(entry);
-      const isToday = dateVal === todayStr();
-      showToast(isToday ? '✓ บันทึกลง Google Sheet แล้ว' : `✓ บันทึกย้อนหลัง ${fmtDate(dateVal)} แล้ว`, 'ok');
-    } else showToast('เกิดข้อผิดพลาด ลองใหม่','err');
-  } catch(e) {
-    saveLocal(entry);
-    showToast('บันทึกในเครื่องแล้ว (ไม่มี internet)','ok');
-  }
-  btn.disabled = false; btn.textContent = 'บันทึก';
 }
 
 function saveLocal(entry) {
@@ -385,6 +371,7 @@ function deleteLocal(id) {
   updateSummary();
   renderHistory();
 }
+
 // ฟังก์ชันดึง Master Data จาก Google Sheets
 async function loadMasterData() {
   try {
@@ -404,14 +391,15 @@ async function loadMasterData() {
   }
 }
 
-initDate(); renderCats(); updateSummary(); loadMasterData();
 function showToast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = type; t.style.display = 'block';
   setTimeout(()=>{ t.style.display='none'; }, 3500);
 }
 
-initDate(); renderCats(); updateSummary();
+// สั่งทำงานตอนเปิดแอป (เรียกแค่รอบเดียวพอ)
+initDate(); renderCats(); updateSummary(); loadMasterData();
+
 </script>
 </body>
 </html>
