@@ -162,7 +162,7 @@
 </div>
 
 <script>
-const API = 'https://script.google.com/macros/s/AKfycbyiP6RQcuzPVqHbd33TGLz__NWp7GDDBkHmv3SImnhCdUFXkY_dw6XTA78g7RDc9AxpMA/exec';
+const API = 'https://script.google.com/macros/s/AKfycbw1zlvgaD6BBdLMa5tRrvWeMT8MzjNeSxq_hf0M3hoG_0wEY8lrfgSvR_py1fXgG6Rnhw/exec';
 const CATS = {
   income: ['ยอดขายสด','ยอดโอน','ยอดขายอาหาร','ยอดขายเครื่องดื่ม','ยอดขายของเก่า','LINE MAN'],
   expense: ['ของสด','ผัก/ผลไม้','ของแห้ง','เครื่องปรุง','ของแช่แข็ง','เครื่องดื่ม','เหล้า/เบียร์','ของใช้','เบ็ดเตล็ด','ค่าใช้จ่าย','เชื้อเพลิง','ค่าแรง']
@@ -358,7 +358,26 @@ function deleteLocal(id) {
   updateSummary();
   renderHistory();
 }
+// ฟังก์ชันดึง Master Data จาก Google Sheets
+async function loadMasterData() {
+  try {
+    const response = await fetch(API + "?action=getItemMaster");
+    const data = await response.json();
+    
+    const dataList = document.getElementById('item-list');
+    dataList.innerHTML = ''; // ล้างข้อมูลเก่า
+    
+    data.forEach(item => {
+      let option = document.createElement('option');
+      option.value = item;
+      dataList.appendChild(option);
+    });
+  } catch (error) {
+    console.error('ไม่สามารถดึงข้อมูล Master Data ได้:', error);
+  }
+}
 
+initDate(); renderCats(); updateSummary(); loadMasterData();
 function showToast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = type; t.style.display = 'block';
