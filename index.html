@@ -121,9 +121,9 @@
   </div>
 
   <div id="summary-bar">
-    <div class="sum-card"><div class="sum-label">รายรับวันนี้</div><div class="sum-val inc" id="s-income">฿0</div></div>
-    <div class="sum-card"><div class="sum-label">รายจ่ายวันนี้</div><div class="sum-val exp" id="s-expense">฿0</div></div>
-    <div class="sum-card"><div class="sum-label">คงเหลือ</div><div class="sum-val" id="s-balance">฿0</div></div>
+    <div class="sum-card"><div class="sum-label" id="lbl-inc">รายรับวันนี้</div><div class="sum-val inc" id="s-income">฿0</div></div>
+    <div class="sum-card"><div class="sum-label" id="lbl-exp">รายจ่ายวันนี้</div><div class="sum-val exp" id="s-expense">฿0</div></div>
+    <div class="sum-card"><div class="sum-label" id="lbl-bal">กำไร/ขาดทุน</div><div class="sum-val" id="s-balance">฿0</div></div>
   </div>
 
   <div id="tabs">
@@ -258,6 +258,28 @@ function updateDateBadge() {
   if (!val) { el.innerHTML = ''; return; }
   const isToday = val === todayStr();
   el.innerHTML = `<span class="date-badge ${isToday?'today':'past'}">${isToday ? 'วันนี้ — ' : 'ย้อนหลัง — '}${fmtDateLong(val)}</span>`;
+  
+  updateSummary(); // <--- สั่งอัปเดตยอดเมื่อเปลี่ยนวัน
+}
+
+function updateSummary() {
+  const targetDate = document.getElementById('entry-date').value || todayStr();
+  const isToday = targetDate === todayStr();
+  
+  document.getElementById('lbl-inc').textContent = isToday ? 'รายรับวันนี้' : 'รายรับตามวันที่';
+  document.getElementById('lbl-exp').textContent = isToday ? 'รายจ่ายวันนี้' : 'รายจ่ายตามวันที่';
+
+  const items = history.filter(r => r.date === targetDate);
+  const inc = items.filter(r => r.type === 'income').reduce((s,r) => s + Number(r.amount), 0);
+  const exp = items.filter(r => r.type === 'expense').reduce((s,r) => s + Number(r.amount), 0);
+  
+  document.getElementById('s-income').textContent = '฿' + inc.toLocaleString();
+  document.getElementById('s-expense').textContent = '฿' + exp.toLocaleString();
+  
+  const bal = inc - exp;
+  const el = document.getElementById('s-balance');
+  el.textContent = (bal < 0 ? '−' : '') + '฿' + Math.abs(bal).toLocaleString();
+  el.style.color = bal < 0 ? 'var(--red)' : bal > 0 ? 'var(--green)' : '#1a1a1a';
 }
 
 function setType(t) {
@@ -319,19 +341,6 @@ function renderHistory() {
     });
   }
   el.innerHTML = html;
-}
-
-function updateSummary() {
-  const today = todayStr();
-  const items = history.filter(r=>r.date===today);
-  const inc = items.filter(r=>r.type==='income').reduce((s,r)=>s+Number(r.amount),0);
-  const exp = items.filter(r=>r.type==='expense').reduce((s,r)=>s+Number(r.amount),0);
-  document.getElementById('s-income').textContent = '฿'+inc.toLocaleString();
-  document.getElementById('s-expense').textContent = '฿'+exp.toLocaleString();
-  const bal = inc - exp;
-  const el = document.getElementById('s-balance');
-  el.textContent = (bal<0?'−':'')+'฿'+Math.abs(bal).toLocaleString();
-  el.style.color = bal<0?'var(--red)':bal>0?'var(--green)':'#1a1a1a';
 }
 
 async function submitEntry() {
