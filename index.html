@@ -24,7 +24,8 @@
   #sync-status.syncing::before{background:#ffe08a}
   #sync-status.error::before{background:#ffb3b3}
 
-  #summary-bar{margin:14px 14px 0;padding:16px 18px;border-radius:18px;background:#fff;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.03)}
+  #summary-bar{margin:14px 14px 28px;padding:16px 18px;border-radius:18px;background:#fff;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.03)}
+  #page-form:not([style*="display: none"]) ~ #summary-bar{margin-bottom:calc(100px + env(safe-area-inset-bottom))}
   .balance-card{text-align:center;padding-bottom:14px;margin-bottom:13px;border-bottom:1px solid var(--border)}
   .balance-card .sum-label{font-size:12px;color:var(--muted);margin-bottom:5px}
   .balance-card .sum-val{font-size:30px;font-weight:800;letter-spacing:-1px}
@@ -146,14 +147,6 @@
     <button class="top-icon" onclick="logout()" title="ออกจากระบบ" aria-label="ออกจากระบบ">ออก</button>
   </div>
 
-  <div id="summary-bar">
-    <div class="balance-card"><div class="sum-label" id="lbl-bal">คงเหลือวันนี้</div><div class="sum-val" id="s-balance">฿0</div></div>
-    <div class="summary-secondary">
-      <div class="sum-card"><div class="sum-label" id="lbl-inc">รายรับวันนี้</div><div class="sum-val inc" id="s-income">฿0</div></div>
-      <div class="sum-card"><div class="sum-label" id="lbl-exp">รายจ่ายวันนี้</div><div class="sum-val exp" id="s-expense">฿0</div></div>
-    </div>
-  </div>
-
   <div id="tabs">
     <div class="tab active" id="tab-form" onclick="switchTab('form')">+ บันทึกรายการ</div>
     <div class="tab" id="tab-hist" onclick="switchTab('history')">ประวัติ</div>
@@ -176,10 +169,15 @@
       </div>
 
       <div class="field">
+        <span class="field-label">หมวดหมู่</span>
+        <div class="cat-grid" id="cat-grid"></div>
+      </div>
+
+      <div class="field">
         <label for="amount">จำนวนเงิน</label>
         <div class="amount-wrap">
           <span class="amount-prefix">฿</span>
-          <input type="number" id="amount" placeholder="0" inputmode="decimal" min="0" step="any" autocomplete="off" />
+          <input type="number" id="amount" placeholder="0" inputmode="decimal" enterkeyhint="next" min="0" step="any" autocomplete="off" />
         </div>
         <div class="quick-amounts" aria-label="จำนวนเงินด่วน">
           <button type="button" onclick="setQuickAmount(100)">฿100</button>
@@ -190,14 +188,9 @@
       </div>
 
       <div class="field">
-        <span class="field-label">หมวดหมู่</span>
-        <div class="cat-grid" id="cat-grid"></div>
-      </div>
-
-      <div class="field">
         <label for="name">ชื่อรายการ <span style="color:var(--red)">*</span></label>
         <div class="autocomplete-wrap">
-          <input type="text" id="name" required placeholder="พิมพ์เพื่อค้นหา เช่น หมู, ผักกาด..." autocomplete="off" aria-autocomplete="list" aria-controls="item-suggestions" aria-expanded="false" />
+          <input type="text" id="name" required enterkeyhint="done" placeholder="พิมพ์เพื่อค้นหา เช่น หมู, ผักกาด..." autocomplete="off" aria-autocomplete="list" aria-controls="item-suggestions" aria-expanded="false" />
           <div id="item-suggestions" role="listbox"></div>
         </div>
         <div class="item-helper">รายการแนะนำจะดึงจากฐานข้อมูล Google Sheets อัตโนมัติ</div>
@@ -221,6 +214,14 @@
   <div id="page-history" style="display:none">
     <div id="hist-list"></div>
   </div>
+
+  <div id="summary-bar">
+    <div class="balance-card"><div class="sum-label" id="lbl-bal">คงเหลือวันนี้</div><div class="sum-val" id="s-balance">฿0</div></div>
+    <div class="summary-secondary">
+      <div class="sum-card"><div class="sum-label" id="lbl-inc">รายรับวันนี้</div><div class="sum-val inc" id="s-income">฿0</div></div>
+      <div class="sum-card"><div class="sum-label" id="lbl-exp">รายจ่ายวันนี้</div><div class="sum-val exp" id="s-expense">฿0</div></div>
+    </div>
+  </div>
 </div>
 
 <!-- Confirm Dialog -->
@@ -239,11 +240,17 @@
  // --- ระบบ Login ---
 const SECRET_PIN = "171717"; // 🔑 ตั้งรหัสผ่านของคุณตรงนี้ได้เลย (เปลี่ยนเป็นเลขอะไรก็ได้)
 
+function focusEntryStart() {
+  const selectedCategory = document.querySelector('.cat-chip[aria-pressed="true"]');
+  if (selectedCategory) document.getElementById('amount').focus();
+  else document.querySelector('.cat-chip')?.focus();
+}
+
 function checkAuth() {
   const isLogged = localStorage.getItem('sawang_logged_in');
   if (isLogged === 'true') {
     document.getElementById('login-screen').style.display = 'none'; // ซ่อนหน้า Login
-    setTimeout(() => document.getElementById('amount').focus(), 150);
+    setTimeout(focusEntryStart, 150);
   } else {
     document.getElementById('app').style.display = 'none'; // ซ่อนแอปหลัก
     setTimeout(() => document.getElementById('pin-input').focus(), 150);
@@ -256,7 +263,7 @@ function login() {
     localStorage.setItem('sawang_logged_in', 'true'); // จำไว้ในเครื่องว่าเข้าระบบแล้ว
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
-    setTimeout(() => document.getElementById('amount').focus(), 150);
+    setTimeout(focusEntryStart, 150);
   } else {
     document.getElementById('login-error').style.display = 'block'; // โชว์ตัวแดง
     document.getElementById('pin-input').value = ''; // เคลียร์ช่องพิมพ์
@@ -360,7 +367,7 @@ function renderCats() {
     d.className = 'cat-chip' + (c===selectedCat ? (currentType==='income'?' sel-income':' sel-expense') : '');
     d.textContent = c;
     d.setAttribute('aria-pressed', c===selectedCat ? 'true' : 'false');
-    d.onclick = () => { selectedCat = c; renderCats(); document.getElementById('name').focus(); };
+    d.onclick = () => { selectedCat = c; renderCats(); document.getElementById('amount').focus(); };
     g.appendChild(d);
   });
 }
@@ -368,7 +375,7 @@ function renderCats() {
 function setQuickAmount(value) {
   const input = document.getElementById('amount');
   input.value = value;
-  input.focus();
+  document.getElementById('name').focus();
 }
 
 function setSyncStatus(text, state = '') {
@@ -667,9 +674,19 @@ nameInput.addEventListener('keydown', e => {
     else submitEntry();
   }
 });
-['amount','note'].forEach(id => document.getElementById(id).addEventListener('keydown', e => {
+document.getElementById('amount').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const amount = Number(e.target.value);
+  if (!amount || amount <= 0) {
+    showToast('กรุณากรอกจำนวนเงิน','err');
+    return;
+  }
+  document.getElementById('name').focus();
+});
+document.getElementById('note').addEventListener('keydown', e => {
   if (e.key === 'Enter') submitEntry();
-}));
+});
 
 // สั่งทำงานตอนเปิดแอป (เรียกแค่รอบเดียวพอ)
 initDate(); setType(currentType); updateSummary(); loadMasterData(); loadHistoryFromSheet();
