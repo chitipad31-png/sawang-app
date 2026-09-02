@@ -25,7 +25,6 @@
   #sync-status.error::before{background:#ffb3b3}
 
   #summary-bar{margin:14px 14px 28px;padding:16px 18px;border-radius:18px;background:#fff;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,.03)}
-  #page-form:not([style*="display: none"]) ~ #summary-bar{margin-bottom:calc(100px + env(safe-area-inset-bottom))}
   .balance-card{text-align:center;padding-bottom:14px;margin-bottom:13px;border-bottom:1px solid var(--border)}
   .balance-card .sum-label{font-size:12px;color:var(--muted);margin-bottom:5px}
   .balance-card .sum-val{font-size:30px;font-weight:800;letter-spacing:-1px}
@@ -39,7 +38,7 @@
   #tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 14px 0;padding:4px;background:#e8e7e1;border-radius:13px;position:sticky;top:82px;z-index:15}
   .tab{min-height:42px;padding:10px;text-align:center;font-size:14px;cursor:pointer;color:var(--muted);border-radius:10px;font-weight:650;display:flex;align-items:center;justify-content:center}
   .tab.active{color:var(--green-dark);background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-  #page-form{padding:14px 14px calc(104px + env(safe-area-inset-bottom));flex:1}
+  #page-form{padding:14px 14px 24px;flex:1}
   #page-history{padding:10px 16px 32px;flex:1}
   .entry-card{background:#fff;border-radius:18px;padding:16px;box-shadow:var(--shadow)}
   .type-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px}
@@ -59,6 +58,7 @@
   #amount::placeholder{color:#b8bcb9}
   .quick-amounts{display:flex;gap:7px;margin-top:8px;overflow-x:auto}
   .quick-amounts button{min-width:68px;min-height:38px;padding:8px 12px;border:1px solid var(--border);border-radius:20px;background:var(--surface);color:#59615d;font-size:13px;font-weight:600;cursor:pointer}
+  .next-btn{width:100%;min-height:46px;margin-top:10px;padding:11px 14px;border:1.5px solid var(--green);border-radius:12px;background:var(--green-light);color:var(--green-dark);font-size:14px;font-weight:750;cursor:pointer}
   .cat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
   .cat-chip{min-height:46px;padding:8px 5px;border:1.5px solid var(--border);border-radius:12px;font-size:12px;text-align:center;cursor:pointer;color:#5f6662;background:#fff;line-height:1.25;user-select:none}
   .cat-chip.sel-income{border-color:var(--green);background:var(--green-light);color:#075a43;font-weight:700}
@@ -81,7 +81,7 @@
   .date-badge{display:inline-block;margin-top:7px;padding:5px 10px;border-radius:20px;font-size:11px;font-weight:600}
   .date-badge.today{background:var(--green-light);color:#075a43}
   .date-badge.past{background:#fff8e6;color:#633806;border:1px solid #fac775}
-  .save-dock{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(520px,100%);padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(180deg,rgba(246,245,241,0),var(--surface) 22%);z-index:25}
+  .save-dock{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
   #submit-btn{width:100%;min-height:56px;padding:14px;background:var(--green);color:#fff;border:none;border-radius:15px;font-size:17px;font-weight:750;cursor:pointer;box-shadow:0 8px 20px rgba(22,132,100,.25)}
   #submit-btn:active{background:var(--green-dark);transform:translateY(1px)}
   #submit-btn:disabled{opacity:.6;cursor:not-allowed}
@@ -185,6 +185,7 @@
           <button type="button" onclick="setQuickAmount(1000)">฿1,000</button>
           <button type="button" onclick="setQuickAmount(5000)">฿5,000</button>
         </div>
+        <button type="button" class="next-btn" onclick="goToItem()">ถัดไป: ชื่อรายการ →</button>
       </div>
 
       <div class="field">
@@ -203,10 +204,10 @@
           <input type="text" id="note" placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)" />
         </div>
       </details>
-    </div>
 
-    <div class="save-dock">
-      <button id="submit-btn" onclick="submitEntry()">บันทึกรายการ</button>
+      <div class="save-dock">
+        <button id="submit-btn" onclick="submitEntry()">บันทึกรายการ</button>
+      </div>
     </div>
     <div id="toast"></div>
   </div>
@@ -375,6 +376,22 @@ function renderCats() {
 function setQuickAmount(value) {
   const input = document.getElementById('amount');
   input.value = value;
+  goToItem();
+}
+
+function goToItem() {
+  if (!selectedCat) {
+    showToast('เลือกหมวดหมู่ก่อน','err');
+    document.querySelector('.cat-chip')?.focus();
+    return;
+  }
+  const amountInput = document.getElementById('amount');
+  const amount = Number(amountInput.value);
+  if (!amount || amount <= 0) {
+    showToast('กรุณากรอกจำนวนเงิน','err');
+    amountInput.focus();
+    return;
+  }
   document.getElementById('name').focus();
 }
 
@@ -677,12 +694,7 @@ nameInput.addEventListener('keydown', e => {
 document.getElementById('amount').addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   e.preventDefault();
-  const amount = Number(e.target.value);
-  if (!amount || amount <= 0) {
-    showToast('กรุณากรอกจำนวนเงิน','err');
-    return;
-  }
-  document.getElementById('name').focus();
+  goToItem();
 });
 document.getElementById('note').addEventListener('keydown', e => {
   if (e.key === 'Enter') submitEntry();
