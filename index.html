@@ -179,7 +179,7 @@
           <input type="text" id="name" required enterkeyhint="next" placeholder="พิมพ์เพื่อค้นหา เช่น หมู, ผักกาด..." autocomplete="off" aria-autocomplete="list" aria-controls="item-suggestions" aria-expanded="false" />
           <div id="item-suggestions" role="listbox"></div>
         </div>
-        <div class="item-helper">รายการใหม่จะถูกจำจากประวัติใน Google Sheets อัตโนมัติ</div>
+        <div class="item-helper">รายการใหม่จะถูกเพิ่มลง MasterData ใน Google Sheets อัตโนมัติ</div>
         <button type="button" class="next-btn" onclick="goToAmount()">ถัดไป: จำนวนเงิน →</button>
       </div>
 
@@ -289,7 +289,8 @@ const CATS = {
 let currentType = localStorage.getItem('sawang_last_type') || 'income';
 if (!CATS[currentType]) currentType = 'income';
 let selectedCat = localStorage.getItem(`sawang_last_cat_${currentType}`) || '';
-let history = JSON.parse(localStorage.getItem('sawang_v2') || '[]');
+let history = [];
+localStorage.removeItem('sawang_v2');
 let pendingDeleteId = null;
 let masterItems = [];
 let masterLoading = false;
@@ -546,8 +547,8 @@ async function submitEntry() {
     type: currentType
   };
 
-  // 2. เซฟลงเครื่องและเคลียร์หน้าจอ "ทันที" (ผู้ใช้จะได้ไม่ต้องรอ)
-  saveLocal(entry);
+  // 2. เก็บไว้ในหน่วยความจำชั่วคราวและเคลียร์หน้าจอทันที
+  addToCurrentSession(entry);
   showToast('✓ บันทึกแล้ว พร้อมกรอกรายการถัดไป', 'ok');
   setSyncStatus('กำลังซิงก์ Google Sheets', 'syncing');
   
@@ -559,19 +560,21 @@ async function submitEntry() {
   fetch(API, {method:'POST', body: JSON.stringify({action:'add', ...entry})})
     .then(r => r.json())
     .then(d => {
-      if (d.status === 'ok') setSyncStatus('ซิงก์ล่าสุดสำเร็จ');
-      else setSyncStatus('ข้อมูลอยู่ในเครื่อง', 'error');
+      if (d.status === 'ok') {
+        mergeMasterItems([entry.name]);
+        setSyncStatus('ซิงก์ล่าสุดสำเร็จ');
+      } else {
+        setSyncStatus('บันทึกลง Google Sheets ไม่สำเร็จ', 'error');
+      }
     })
     .catch(e => {
-      setSyncStatus('รออินเทอร์เน็ต', 'error');
-      console.error('Offline / ส่งไม่สำเร็จ จะเซฟแค่ในเครื่อง', e);
+      setSyncStatus('บันทึกลง Google Sheets ไม่สำเร็จ', 'error');
+      console.error('Offline / ส่งข้อมูลไม่สำเร็จ', e);
     });
 }
 
-function saveLocal(entry) {
+function addToCurrentSession(entry) {
   history.push(entry);
-  mergeMasterItems([entry.name]);
-  localStorage.setItem('sawang_v2', JSON.stringify(history));
   localStorage.setItem('sawang_last_type', entry.type);
   localStorage.setItem(`sawang_last_cat_${entry.type}`, entry.category);
   updateSummary();
@@ -608,23 +611,22 @@ async function confirmDelete() {
     const r = await fetch(API, {method:'POST', body: JSON.stringify({action:'delete', id})});
     const d = await r.json();
     if (d.status === 'ok') {
-      deleteLocal(id);
+      removeFromCurrentSession(id);
       closeConfirm();
       showToast('✓ ลบออกจาก Google Sheet แล้ว', 'ok');
     } else {
       showToast('ลบไม่สำเร็จ ลองใหม่', 'err');
     }
   } catch(e) {
-    deleteLocal(id);
+    removeFromCurrentSession(id);
     closeConfirm();
-    showToast('ลบในเครื่องแล้ว (ไม่มี internet)', 'ok');
+    showToast('ซ่อนจากหน้าจอนี้แล้ว แต่ยังลบใน Google Sheets ไม่สำเร็จ', 'err');
   }
   btn.disabled = false; btn.textContent = 'ลบเลย';
 }
 
-function deleteLocal(id) {
+function removeFromCurrentSession(id) {
   history = history.filter(r => r.id !== id);
-  localStorage.setItem('sawang_v2', JSON.stringify(history));
   updateSummary();
   renderHistory();
 }
@@ -656,8 +658,6 @@ async function loadHistoryFromSheet() {
     
     if (data && Array.isArray(data)) {
       history = data;
-      mergeMasterItems(history.map(item => item.name));
-      localStorage.setItem('sawang_v2', JSON.stringify(history)); 
       updateSummary(); 
       
       if (document.getElementById('page-history').style.display === 'block') {
@@ -712,7 +712,6 @@ document.getElementById('note').addEventListener('keydown', e => {
 });
 
 // สั่งทำงานตอนเปิดแอป (เรียกแค่รอบเดียวพอ)
-mergeMasterItems(history.map(item => item.name));
 initDate(); setType(currentType); updateSummary(); loadMasterData(); loadHistoryFromSheet();
 
 </script>
