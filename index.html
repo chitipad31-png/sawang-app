@@ -62,6 +62,13 @@
   .cat-chip{min-height:46px;padding:8px 5px;border:1.5px solid var(--border);border-radius:12px;font-size:12px;text-align:center;cursor:pointer;color:#5f6662;background:#fff;line-height:1.25;user-select:none}
   .cat-chip.sel-income{border-color:var(--green);background:var(--green-light);color:#075a43;font-weight:700}
   .cat-chip.sel-expense{border-color:var(--red);background:var(--red-light);color:#8a2929;font-weight:700}
+  .autocomplete-wrap{position:relative}
+  .item-helper{margin-top:7px;color:var(--muted);font-size:11px}
+  #item-suggestions{display:none;position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:30;max-height:248px;overflow-y:auto;padding:6px;background:#fff;border:1px solid var(--border);border-radius:13px;box-shadow:0 14px 38px rgba(31,49,42,.18)}
+  #item-suggestions.show{display:block}
+  .suggestion-item{display:flex;width:100%;min-height:44px;padding:10px 12px;align-items:center;border:0;border-radius:9px;background:#fff;color:var(--text);text-align:left;font-size:14px;cursor:pointer}
+  .suggestion-item:hover,.suggestion-item.active{background:var(--green-light);color:var(--green-dark)}
+  .suggestion-empty{padding:12px;color:var(--muted);font-size:13px;text-align:center}
   .detail-panel{margin-top:2px;border-top:1px solid var(--border)}
   .detail-panel summary{list-style:none;padding:15px 2px 2px;color:var(--green-dark);font-size:13px;font-weight:700;cursor:pointer}
   .detail-panel summary::-webkit-details-marker{display:none}
@@ -160,6 +167,15 @@
       </div>
 
       <div class="field">
+        <label for="entry-date">วันที่บันทึก</label>
+        <div class="date-row">
+          <input type="date" id="entry-date" onchange="updateDateBadge()" />
+          <button class="today-btn" type="button" onclick="setToday()">วันนี้</button>
+        </div>
+        <div id="date-badge"></div>
+      </div>
+
+      <div class="field">
         <label for="amount">จำนวนเงิน</label>
         <div class="amount-wrap">
           <span class="amount-prefix">฿</span>
@@ -179,21 +195,16 @@
       </div>
 
       <div class="field">
-        <label for="name">ชื่อรายการ <span style="font-weight:400;color:var(--muted)">(ไม่ใส่ก็ได้)</span></label>
-        <input type="text" id="name" list="item-list" placeholder="เช่น หมู, ผักกาด..." autocomplete="off" />
-        <datalist id="item-list"></datalist>
+        <label for="name">ชื่อรายการ <span style="color:var(--red)">*</span></label>
+        <div class="autocomplete-wrap">
+          <input type="text" id="name" required placeholder="พิมพ์เพื่อค้นหา เช่น หมู, ผักกาด..." autocomplete="off" aria-autocomplete="list" aria-controls="item-suggestions" aria-expanded="false" />
+          <div id="item-suggestions" role="listbox"></div>
+        </div>
+        <div class="item-helper">รายการแนะนำจะดึงจากฐานข้อมูล Google Sheets อัตโนมัติ</div>
       </div>
 
       <details class="detail-panel">
-        <summary>วันที่และหมายเหตุ</summary>
-        <div class="field">
-          <label for="entry-date">วันที่บันทึก</label>
-          <div class="date-row">
-            <input type="date" id="entry-date" onchange="updateDateBadge()" />
-            <button class="today-btn" type="button" onclick="setToday()">วันนี้</button>
-          </div>
-          <div id="date-badge"></div>
-        </div>
+        <summary>เพิ่มหมายเหตุ</summary>
         <div class="field">
           <label for="note">หมายเหตุ</label>
           <input type="text" id="note" placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)" />
@@ -272,6 +283,9 @@ if (!CATS[currentType]) currentType = 'income';
 let selectedCat = localStorage.getItem(`sawang_last_cat_${currentType}`) || '';
 let history = JSON.parse(localStorage.getItem('sawang_v2') || '[]');
 let pendingDeleteId = null;
+let masterItems = [];
+let masterLoading = false;
+let activeSuggestionIndex = -1;
 
 function todayStr() {
   const d = new Date();
@@ -363,6 +377,73 @@ function setSyncStatus(text, state = '') {
   el.className = state;
 }
 
+function hideItemSuggestions() {
+  const list = document.getElementById('item-suggestions');
+  list.classList.remove('show');
+  list.innerHTML = '';
+  activeSuggestionIndex = -1;
+  document.getElementById('name').setAttribute('aria-expanded', 'false');
+}
+
+function selectItemSuggestion(item) {
+  const input = document.getElementById('name');
+  input.value = item;
+  hideItemSuggestions();
+  input.focus();
+}
+
+function renderItemSuggestions() {
+  const input = document.getElementById('name');
+  const list = document.getElementById('item-suggestions');
+  const query = input.value.trim().toLocaleLowerCase('th-TH');
+
+  if (!query) { hideItemSuggestions(); return; }
+
+  if (masterLoading && !masterItems.length) {
+    list.innerHTML = '<div class="suggestion-empty">กำลังดึงรายการจากฐานข้อมูล...</div>';
+    list.classList.add('show');
+    input.setAttribute('aria-expanded', 'true');
+    return;
+  }
+
+  const matches = masterItems
+    .filter(item => item.toLocaleLowerCase('th-TH').includes(query))
+    .sort((a,b) => {
+      const aStarts = a.toLocaleLowerCase('th-TH').startsWith(query);
+      const bStarts = b.toLocaleLowerCase('th-TH').startsWith(query);
+      return aStarts === bStarts ? a.localeCompare(b, 'th') : aStarts ? -1 : 1;
+    })
+    .slice(0, 8);
+
+  list.innerHTML = '';
+  activeSuggestionIndex = -1;
+  if (!matches.length) {
+    list.innerHTML = '<div class="suggestion-empty">ไม่พบรายการเดิม — ใช้ชื่อที่พิมพ์ใหม่ได้</div>';
+  } else {
+    matches.forEach((item, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'suggestion-item';
+      button.setAttribute('role', 'option');
+      button.dataset.index = index;
+      button.textContent = item;
+      button.addEventListener('mousedown', e => e.preventDefault());
+      button.addEventListener('click', () => selectItemSuggestion(item));
+      list.appendChild(button);
+    });
+  }
+  list.classList.add('show');
+  input.setAttribute('aria-expanded', 'true');
+}
+
+function moveItemSuggestion(direction) {
+  const options = [...document.querySelectorAll('.suggestion-item')];
+  if (!options.length) return;
+  activeSuggestionIndex = (activeSuggestionIndex + direction + options.length) % options.length;
+  options.forEach((option, index) => option.classList.toggle('active', index === activeSuggestionIndex));
+  options[activeSuggestionIndex].scrollIntoView({block:'nearest'});
+}
+
 function switchTab(t) {
   document.getElementById('tab-form').classList.toggle('active', t==='form');
   document.getElementById('tab-hist').classList.toggle('active', t==='history');
@@ -408,10 +489,12 @@ function renderHistory() {
 async function submitEntry() {
   const dateVal = document.getElementById('entry-date').value;
   const amount = document.getElementById('amount').value.trim();
+  const name = document.getElementById('name').value.trim();
   
   if (!dateVal) { showToast('กรุณาเลือกวันที่','err'); return; }
   if (!amount || isNaN(amount) || Number(amount)<=0) { showToast('กรุณากรอกจำนวนเงิน','err'); document.getElementById('amount').focus(); return; }
   if (!selectedCat) { showToast('เลือกหมวดหมู่ก่อนบันทึก','err'); document.getElementById('cat-grid').scrollIntoView({behavior:'smooth',block:'center'}); return; }
+  if (!name) { showToast('กรุณาใส่ชื่อรายการ','err'); document.getElementById('name').focus(); return; }
   
   const btn = document.getElementById('submit-btn');
   btn.disabled = true; 
@@ -422,7 +505,7 @@ async function submitEntry() {
     id: Date.now().toString(),
     date: dateVal,
     category: selectedCat,
-    name: document.getElementById('name').value.trim(),
+    name,
     amount: Number(amount),
     note: document.getElementById('note').value.trim(),
     type: currentType
@@ -459,6 +542,7 @@ function saveLocal(entry) {
   document.getElementById('amount').value = '';
   document.getElementById('name').value = '';
   document.getElementById('note').value = '';
+  hideItemSuggestions();
   renderCats();
   setTimeout(() => document.getElementById('amount').focus(), 80);
 }
@@ -511,20 +595,22 @@ function deleteLocal(id) {
 
 // ฟังก์ชันดึง Master Data จาก Google Sheets
 async function loadMasterData() {
+  if (masterLoading) return;
+  masterLoading = true;
   try {
-    const response = await fetch(API + "?action=getItemMaster");
+    const response = await fetch(API + "?action=getItemMaster&t=" + Date.now());
     const data = await response.json();
-    
-    const dataList = document.getElementById('item-list');
-    dataList.innerHTML = ''; // ล้างข้อมูลเก่า
-    
-    data.forEach(item => {
-      let option = document.createElement('option');
-      option.value = item;
-      dataList.appendChild(option);
-    });
+    masterItems = Array.isArray(data)
+      ? [...new Set(data.map(item => String(item).trim()).filter(Boolean))]
+      : [];
   } catch (error) {
     console.error('ไม่สามารถดึงข้อมูล Master Data ได้:', error);
+    const helper = document.querySelector('.item-helper');
+    helper.textContent = 'ดึงรายการเดิมไม่สำเร็จ แต่ยังพิมพ์ชื่อรายการใหม่ได้';
+    helper.style.color = 'var(--red)';
+  } finally {
+    masterLoading = false;
+    renderItemSuggestions();
   }
 }
 // ฟังก์ชันดึงประวัติจาก Google Sheets ตอนเปิดแอป
@@ -561,7 +647,27 @@ document.getElementById('pin-input').addEventListener('input', e => {
 document.getElementById('pin-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') login();
 });
-['amount','name','note'].forEach(id => document.getElementById(id).addEventListener('keydown', e => {
+const nameInput = document.getElementById('name');
+nameInput.addEventListener('input', () => {
+  if (!masterItems.length && !masterLoading) loadMasterData();
+  renderItemSuggestions();
+});
+nameInput.addEventListener('focus', () => {
+  if (!masterItems.length && !masterLoading) loadMasterData();
+  renderItemSuggestions();
+});
+nameInput.addEventListener('blur', () => setTimeout(hideItemSuggestions, 120));
+nameInput.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); moveItemSuggestion(1); return; }
+  if (e.key === 'ArrowUp') { e.preventDefault(); moveItemSuggestion(-1); return; }
+  if (e.key === 'Escape') { hideItemSuggestions(); return; }
+  if (e.key === 'Enter') {
+    const active = document.querySelector('.suggestion-item.active');
+    if (active) { e.preventDefault(); selectItemSuggestion(active.textContent); }
+    else submitEntry();
+  }
+});
+['amount','note'].forEach(id => document.getElementById(id).addEventListener('keydown', e => {
   if (e.key === 'Enter') submitEntry();
 }));
 
