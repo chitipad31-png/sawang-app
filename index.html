@@ -179,7 +179,7 @@
           <input type="text" id="name" required enterkeyhint="next" placeholder="พิมพ์เพื่อค้นหา เช่น หมู, ผักกาด..." autocomplete="off" aria-autocomplete="list" aria-controls="item-suggestions" aria-expanded="false" />
           <div id="item-suggestions" role="listbox"></div>
         </div>
-        <div class="item-helper">รายการแนะนำจะดึงจากฐานข้อมูล Google Sheets อัตโนมัติ</div>
+        <div class="item-helper">รายการใหม่จะถูกจำจากประวัติใน Google Sheets อัตโนมัติ</div>
         <button type="button" class="next-btn" onclick="goToAmount()">ถัดไป: จำนวนเงิน →</button>
       </div>
 
@@ -401,6 +401,17 @@ function setSyncStatus(text, state = '') {
   el.className = state;
 }
 
+function mergeMasterItems(items) {
+  const known = new Map(masterItems.map(item => [item.toLocaleLowerCase('th-TH'), item]));
+  items.forEach(rawItem => {
+    const item = String(rawItem || '').trim();
+    if (!item) return;
+    const key = item.toLocaleLowerCase('th-TH');
+    if (!known.has(key)) known.set(key, item);
+  });
+  masterItems = [...known.values()].sort((a,b) => a.localeCompare(b, 'th'));
+}
+
 function hideItemSuggestions() {
   const list = document.getElementById('item-suggestions');
   list.classList.remove('show');
@@ -559,6 +570,7 @@ async function submitEntry() {
 
 function saveLocal(entry) {
   history.push(entry);
+  mergeMasterItems([entry.name]);
   localStorage.setItem('sawang_v2', JSON.stringify(history));
   localStorage.setItem('sawang_last_type', entry.type);
   localStorage.setItem(`sawang_last_cat_${entry.type}`, entry.category);
@@ -624,9 +636,7 @@ async function loadMasterData() {
   try {
     const response = await fetch(API + "?action=getItemMaster&t=" + Date.now());
     const data = await response.json();
-    masterItems = Array.isArray(data)
-      ? [...new Set(data.map(item => String(item).trim()).filter(Boolean))]
-      : [];
+    if (Array.isArray(data)) mergeMasterItems(data);
   } catch (error) {
     console.error('ไม่สามารถดึงข้อมูล Master Data ได้:', error);
     const helper = document.querySelector('.item-helper');
@@ -646,6 +656,7 @@ async function loadHistoryFromSheet() {
     
     if (data && Array.isArray(data)) {
       history = data;
+      mergeMasterItems(history.map(item => item.name));
       localStorage.setItem('sawang_v2', JSON.stringify(history)); 
       updateSummary(); 
       
@@ -701,6 +712,7 @@ document.getElementById('note').addEventListener('keydown', e => {
 });
 
 // สั่งทำงานตอนเปิดแอป (เรียกแค่รอบเดียวพอ)
+mergeMasterItems(history.map(item => item.name));
 initDate(); setType(currentType); updateSummary(); loadMasterData(); loadHistoryFromSheet();
 
 </script>
